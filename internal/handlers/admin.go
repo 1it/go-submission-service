@@ -52,52 +52,8 @@ func AdminListSubmissionsHandler(repo *database.Repository, cfg *config.Config) 
 			return
 		}
 
-		// Parse query parameters
-		query := r.URL.Query()
+		page, limit, filters := adminParseListParams(r.URL.Query())
 
-		// Pagination
-		page := 1
-		if p := query.Get("page"); p != "" {
-			if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
-				page = parsed
-			}
-		}
-
-		limit := 50 // Default limit
-		if l := query.Get("limit"); l != "" {
-			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
-				limit = parsed
-			}
-		}
-
-		offset := (page - 1) * limit
-
-		// Build filters
-		filters := database.SubmissionFilters{
-			Status:   query.Get("status"),
-			FormType: query.Get("form_type"),
-			Source:   query.Get("source"),
-			Limit:    limit,
-			Offset:   offset,
-			OrderBy:  "created_at",
-			OrderDir: "DESC",
-		}
-
-		// Parse date filters
-		if startDate := query.Get("start_date"); startDate != "" {
-			if parsed, err := time.Parse("2006-01-02", startDate); err == nil {
-				filters.StartDate = &parsed
-			}
-		}
-		if endDate := query.Get("end_date"); endDate != "" {
-			if parsed, err := time.Parse("2006-01-02", endDate); err == nil {
-				// Set to end of day
-				parsed = parsed.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-				filters.EndDate = &parsed
-			}
-		}
-
-		// Get submissions
 		submissions, err := repo.Submissions.List(filters)
 		if err != nil {
 			log.Printf("Error listing submissions: %v", err)
@@ -105,14 +61,12 @@ func AdminListSubmissionsHandler(repo *database.Repository, cfg *config.Config) 
 			return
 		}
 
-		// Get total count
 		total, err := repo.Submissions.Count(filters)
 		if err != nil {
 			log.Printf("Error counting submissions: %v", err)
-			total = len(submissions) // Fallback
+			total = len(submissions)
 		}
 
-		// Build response
 		response := AdminSubmissionsResponse{
 			Submissions: submissions,
 			Total:       total,
@@ -122,8 +76,8 @@ func AdminListSubmissionsHandler(repo *database.Repository, cfg *config.Config) 
 				"status":     filters.Status,
 				"form_type":  filters.FormType,
 				"source":     filters.Source,
-				"start_date": query.Get("start_date"),
-				"end_date":   query.Get("end_date"),
+				"start_date": r.URL.Query().Get("start_date"),
+				"end_date":   r.URL.Query().Get("end_date"),
 			},
 		}
 
@@ -132,6 +86,50 @@ func AdminListSubmissionsHandler(repo *database.Repository, cfg *config.Config) 
 			log.Printf("Failed to encode response: %v", err)
 		}
 	}
+}
+
+func adminParseListParams(query interface{ Get(string) string }) (page, limit int, filters database.SubmissionFilters) {
+	page = 1
+	if p := query.Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+
+	limit = 50
+	if l := query.Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	filters = database.SubmissionFilters{
+		Status:   query.Get("status"),
+		FormType: query.Get("form_type"),
+		Source:   query.Get("source"),
+		Limit:    limit,
+		Offset:   (page - 1) * limit,
+		OrderBy:  "created_at",
+		OrderDir: "DESC",
+	}
+
+	if startDate := query.Get("start_date"); startDate != "" {
+		if parsed, err := time.Parse("2006-01-02", startDate); err == nil {
+			filters.StartDate = &parsed
+		}
+	}
+	if endDate := query.Get("end_date"); endDate != "" {
+		if parsed, err := time.Parse("2006-01-02", endDate); err == nil {
+			filters.EndDate = parseEndOfDay(parsed)
+		}
+	}
+
+	return page, limit, filters
+}
+
+func parseEndOfDay(t time.Time) *time.Time {
+	end := t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	return &end
 }
 
 // AdminGetSubmissionHandler handles GET /api/v1/admin/submissions/{id}

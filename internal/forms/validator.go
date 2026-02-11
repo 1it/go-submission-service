@@ -24,27 +24,39 @@ func NewValidator(config *config.Config) *Validator {
 // ValidateSubmission validates form data against configuration rules
 func (v *Validator) ValidateSubmission(formData map[string]interface{}) (map[string]string, error) {
 	errors := make(map[string]string)
+	validateRequiredFields(formData, v.config.Form.RequiredFields, errors)
+	validateEmailField(formData, v.config.Form.EmailField, errors)
+	validateConfigRules(formData, v.config.Form.ValidationRules, errors)
+	validateCrossFieldRules(formData, v.config.Form.CrossFieldRules, errors)
+	if len(errors) > 0 {
+		return errors, fmt.Errorf("validation failed")
+	}
+	return nil, nil
+}
 
-	// Check required fields
-	for _, field := range v.config.Form.RequiredFields {
+func validateRequiredFields(formData map[string]interface{}, required []string, errors map[string]string) {
+	for _, field := range required {
 		if value, exists := formData[field]; !exists || isEmpty(value) {
 			errors[field] = fmt.Sprintf("Field '%s' is required", field)
 		}
 	}
+}
 
-	// Check email field if specified
-	if emailField := v.config.Form.EmailField; emailField != "" {
-		if email, ok := formData[emailField].(string); ok {
-			if email != "" && !isValidEmail(email) {
-				errors[emailField] = "Invalid email address"
-			}
-		} else if _, exists := formData[emailField]; exists {
-			errors[emailField] = "Email must be a string"
-		}
+func validateEmailField(formData map[string]interface{}, emailField string, errors map[string]string) {
+	if emailField == "" {
+		return
 	}
+	if email, ok := formData[emailField].(string); ok {
+		if email != "" && !isValidEmail(email) {
+			errors[emailField] = "Invalid email address"
+		}
+	} else if _, exists := formData[emailField]; exists {
+		errors[emailField] = "Email must be a string"
+	}
+}
 
-	// Apply validation rules from configuration
-	for field, rule := range v.config.Form.ValidationRules {
+func validateConfigRules(formData map[string]interface{}, rules map[string]config.ValidationRule, errors map[string]string) {
+	for field, rule := range rules {
 		if value, exists := formData[field]; exists {
 			if err := validateField(field, value, rule); err != nil {
 				if rule.Message != "" {
@@ -55,23 +67,18 @@ func (v *Validator) ValidateSubmission(formData map[string]interface{}) (map[str
 			}
 		}
 	}
+}
 
-	// Apply cross-field validation rules if any
-	if len(v.config.Form.CrossFieldRules) > 0 {
-		crossFieldErrors, err := ValidateCrossFieldRules(formData, v.config.Form.CrossFieldRules)
-		if err != nil {
-			// Merge cross-field errors with field errors
-			for field, message := range crossFieldErrors {
-				errors[field] = message
-			}
+func validateCrossFieldRules(formData map[string]interface{}, rules []config.CrossFieldRule, errors map[string]string) {
+	if len(rules) == 0 {
+		return
+	}
+	crossFieldErrors, err := ValidateCrossFieldRules(formData, rules)
+	if err != nil {
+		for field, message := range crossFieldErrors {
+			errors[field] = message
 		}
 	}
-
-	if len(errors) > 0 {
-		return errors, fmt.Errorf("validation failed")
-	}
-
-	return nil, nil
 }
 
 // SanitizeSubmission sanitizes form data
@@ -124,78 +131,82 @@ func isEmpty(value interface{}) bool {
 // ValidateBusinessContactForm validates a business contact form specifically
 func (v *Validator) ValidateBusinessContactForm(formData map[string]interface{}) (map[string]string, error) {
 	errors := make(map[string]string)
+	validateBusinessContactRequired(formData, errors)
+	validateBusinessContactWorkEmail(formData, errors)
+	validateBusinessContactCompanySize(formData, errors)
+	validateBusinessContactFullName(formData, errors)
+	validateBusinessContactCompany(formData, errors)
+	validateBusinessContactPhone(formData, errors)
+	validateBusinessContactJobTitle(formData, errors)
+	validateBusinessContactMessage(formData, errors)
+	if len(errors) > 0 {
+		return errors, fmt.Errorf("business contact form validation failed")
+	}
+	return nil, nil
+}
 
-	// Required fields for business contact form
-	requiredFields := []string{"full_name", "work_email", "company", "company_size"}
-
-	for _, field := range requiredFields {
+func validateBusinessContactRequired(formData map[string]interface{}, errors map[string]string) {
+	for _, field := range []string{"full_name", "work_email", "company", "company_size"} {
 		if value, exists := formData[field]; !exists || isEmpty(value) {
 			errors[field] = fmt.Sprintf("Field '%s' is required", field)
 		}
 	}
+}
 
-	// Validate work email
-	if workEmail, ok := formData["work_email"].(string); ok && workEmail != "" {
-		if !isValidEmail(workEmail) {
-			errors["work_email"] = "Invalid email address"
-		}
+func validateBusinessContactWorkEmail(formData map[string]interface{}, errors map[string]string) {
+	if workEmail, ok := formData["work_email"].(string); ok && workEmail != "" && !isValidEmail(workEmail) {
+		errors["work_email"] = "Invalid email address"
 	}
+}
 
-	// Validate company size options
+func validateBusinessContactCompanySize(formData map[string]interface{}, errors map[string]string) {
 	if companySize, ok := formData["company_size"].(string); ok && companySize != "" {
 		validSizes := []string{"50-200", "200-500", "500-1000", "1000-5000"}
 		if !contains(validSizes, companySize) {
 			errors["company_size"] = "Invalid company size. Must be one of: 50-200, 200-500, 500-1000, 1000-5000"
 		}
 	}
+}
 
-	// Validate full name length
+func validateBusinessContactFullName(formData map[string]interface{}, errors map[string]string) {
 	if fullName, ok := formData["full_name"].(string); ok && fullName != "" {
 		if len(strings.TrimSpace(fullName)) < 2 {
 			errors["full_name"] = "Full name must be at least 2 characters long"
-		}
-		if len(fullName) > 100 {
+		} else if len(fullName) > 100 {
 			errors["full_name"] = "Full name must be less than 100 characters"
 		}
 	}
+}
 
-	// Validate company name length
+func validateBusinessContactCompany(formData map[string]interface{}, errors map[string]string) {
 	if company, ok := formData["company"].(string); ok && company != "" {
 		if len(strings.TrimSpace(company)) < 2 {
 			errors["company"] = "Company name must be at least 2 characters long"
-		}
-		if len(company) > 200 {
+		} else if len(company) > 200 {
 			errors["company"] = "Company name must be less than 200 characters"
 		}
 	}
+}
 
-	// Validate optional phone number format if provided
+func validateBusinessContactPhone(formData map[string]interface{}, errors map[string]string) {
 	if phone, ok := formData["phone"].(string); ok && phone != "" {
 		phoneRegex := regexp.MustCompile(`^[\+]?[1-9][\d]{0,15}$|^[\+]?[1-9][\d\s\-\(\)]{7,20}$`)
 		if !phoneRegex.MatchString(phone) {
 			errors["phone"] = "Invalid phone number format"
 		}
 	}
+}
 
-	// Validate job title length if provided
-	if jobTitle, ok := formData["job_title"].(string); ok && jobTitle != "" {
-		if len(jobTitle) > 100 {
-			errors["job_title"] = "Job title must be less than 100 characters"
-		}
+func validateBusinessContactJobTitle(formData map[string]interface{}, errors map[string]string) {
+	if jobTitle, ok := formData["job_title"].(string); ok && jobTitle != "" && len(jobTitle) > 100 {
+		errors["job_title"] = "Job title must be less than 100 characters"
 	}
+}
 
-	// Validate message length if provided
-	if message, ok := formData["message"].(string); ok && message != "" {
-		if len(message) > 1000 {
-			errors["message"] = "Message must be less than 1000 characters"
-		}
+func validateBusinessContactMessage(formData map[string]interface{}, errors map[string]string) {
+	if message, ok := formData["message"].(string); ok && message != "" && len(message) > 1000 {
+		errors["message"] = "Message must be less than 1000 characters"
 	}
-
-	if len(errors) > 0 {
-		return errors, fmt.Errorf("business contact form validation failed")
-	}
-
-	return nil, nil
 }
 
 // ValidateFormByType validates form data based on form type

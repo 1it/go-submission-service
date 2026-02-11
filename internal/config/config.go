@@ -286,25 +286,33 @@ func Load() (*Config, error) {
 
 // loadEnvVars loads environment variables into the configuration
 func loadEnvVars(config *Config) {
-	// Server configuration
+	loadServerEnv(config)
+	loadDatabaseEnv(config)
+	loadEmailEnv(config)
+	loadFormEnv(config)
+	loadSecurityEnv(config)
+	loadRetryEnv(config)
+}
+
+func loadServerEnv(config *Config) {
 	if port := os.Getenv("PORT"); port != "" {
 		config.Server.Port = port
 	}
 	if host := os.Getenv("HOST"); host != "" {
 		config.Server.Host = host
 	}
+}
 
-	// Database configuration
+func loadDatabaseEnv(config *Config) {
 	if dbPath := os.Getenv("DB_PATH"); dbPath != "" {
 		config.Database.Path = dbPath
 	}
+}
 
-	// Email configuration
+func loadEmailEnv(config *Config) {
 	if provider := os.Getenv("EMAIL_PROVIDER"); provider != "" {
 		config.Email.Provider = provider
 	}
-
-	// SMTP configuration
 	if smtpHost := os.Getenv("SMTP_HOST"); smtpHost != "" {
 		config.Email.SMTP.Host = smtpHost
 	}
@@ -320,8 +328,6 @@ func loadEnvVars(config *Config) {
 	if smtpFrom := os.Getenv("SMTP_FROM"); smtpFrom != "" {
 		config.Email.SMTP.From = smtpFrom
 	}
-
-	// MailerSend configuration
 	if apiKey := os.Getenv("MAILERSEND_API_KEY"); apiKey != "" {
 		config.Email.MailerSend.APIKey = apiKey
 	}
@@ -331,8 +337,6 @@ func loadEnvVars(config *Config) {
 	if fromName := os.Getenv("MAILERSEND_FROM_NAME"); fromName != "" {
 		config.Email.MailerSend.FromName = fromName
 	}
-
-	// Template configuration
 	if templatesDir := os.Getenv("TEMPLATES_DIR"); templatesDir != "" {
 		config.Email.Templates.Directory = templatesDir
 	}
@@ -342,13 +346,12 @@ func loadEnvVars(config *Config) {
 	if subject := os.Getenv("EMAIL_SUBJECT"); subject != "" {
 		config.Email.Templates.Subject = subject
 	}
-
-	// Admin email for notifications
 	if adminEmail := os.Getenv("ADMIN_EMAIL"); adminEmail != "" {
 		config.Email.AdminEmail = adminEmail
 	}
+}
 
-	// Form configuration
+func loadFormEnv(config *Config) {
 	if emailField := os.Getenv("EMAIL_FIELD"); emailField != "" {
 		config.Form.EmailField = emailField
 	}
@@ -360,22 +363,31 @@ func loadEnvVars(config *Config) {
 			config.Form.MaxRequestSize = size
 		}
 	}
-	if disableHTMLEscaping := os.Getenv("DISABLE_HTML_ESCAPING"); disableHTMLEscaping == "true" {
+	if os.Getenv("DISABLE_HTML_ESCAPING") == "true" {
 		if config.Form.SanitizationOptions == nil {
 			config.Form.SanitizationOptions = &SanitizationOptions{}
 		}
 		config.Form.SanitizationOptions.DisableHTMLEscaping = true
 	}
-	if disableHTMLTagRemoval := os.Getenv("DISABLE_HTML_TAG_REMOVAL"); disableHTMLTagRemoval == "true" {
+	if os.Getenv("DISABLE_HTML_TAG_REMOVAL") == "true" {
 		if config.Form.SanitizationOptions == nil {
 			config.Form.SanitizationOptions = &SanitizationOptions{}
 		}
 		config.Form.SanitizationOptions.DisableHTMLTagRemoval = true
 	}
+}
 
-	// Security configuration - CORS
+func loadSecurityEnv(config *Config) {
+	loadCORSEnv(config)
+	loadTurnstileEnv(config)
+	loadRecaptchaEnv(config)
+	loadRateLimitEnv(config)
+	loadAdminEnv(config)
+	loadSecurityHeadersEnv(config)
+}
+
+func loadCORSEnv(config *Config) {
 	if origins := os.Getenv("CORS_ALLOWED_ORIGINS"); origins != "" {
-		// Parse comma-separated values
 		config.Security.CORS.AllowedOrigins = parseCommaSeparated(origins)
 	}
 	if methods := os.Getenv("CORS_ALLOWED_METHODS"); methods != "" {
@@ -384,9 +396,10 @@ func loadEnvVars(config *Config) {
 	if headers := os.Getenv("CORS_ALLOWED_HEADERS"); headers != "" {
 		config.Security.CORS.AllowedHeaders = parseCommaSeparated(headers)
 	}
+}
 
-	// Security configuration - Turnstile
-	if turnstileEnabled := os.Getenv("TURNSTILE_ENABLED"); turnstileEnabled == "true" {
+func loadTurnstileEnv(config *Config) {
+	if os.Getenv("TURNSTILE_ENABLED") == "true" {
 		config.Security.Turnstile.Enabled = true
 	}
 	if secretKey := os.Getenv("TURNSTILE_SECRET_KEY"); secretKey != "" {
@@ -395,9 +408,10 @@ func loadEnvVars(config *Config) {
 	if siteKey := os.Getenv("TURNSTILE_SITE_KEY"); siteKey != "" {
 		config.Security.Turnstile.SiteKey = siteKey
 	}
+}
 
-	// Security configuration - reCAPTCHA
-	if enabled := os.Getenv("RECAPTCHA_ENABLED"); enabled == "true" {
+func loadRecaptchaEnv(config *Config) {
+	if os.Getenv("RECAPTCHA_ENABLED") == "true" {
 		config.Security.ReCAPTCHA.Enabled = true
 	}
 	if secretKey := os.Getenv("RECAPTCHA_SECRET_KEY"); secretKey != "" {
@@ -409,15 +423,16 @@ func loadEnvVars(config *Config) {
 	if actionName := os.Getenv("RECAPTCHA_ACTION_NAME"); actionName != "" {
 		config.Security.ReCAPTCHA.ActionName = actionName
 	}
-	if enterpriseEnabled := os.Getenv("RECAPTCHA_ENTERPRISE_ENABLED"); enterpriseEnabled == "true" {
+	if os.Getenv("RECAPTCHA_ENTERPRISE_ENABLED") == "true" {
 		config.Security.ReCAPTCHA.EnterpriseEnabled = true
 	}
 	if projectID := os.Getenv("RECAPTCHA_PROJECT_ID"); projectID != "" {
 		config.Security.ReCAPTCHA.ProjectID = projectID
 	}
+}
 
-	// Security configuration - Rate Limiting
-	if rateLimitEnabled := os.Getenv("RATE_LIMIT_ENABLED"); rateLimitEnabled == "false" {
+func loadRateLimitEnv(config *Config) {
+	if os.Getenv("RATE_LIMIT_ENABLED") == "false" {
 		config.Security.RateLimit.Enabled = false
 	}
 	if requestsPerMin := os.Getenv("RATE_LIMIT_REQUESTS_PER_MINUTE"); requestsPerMin != "" {
@@ -430,9 +445,10 @@ func loadEnvVars(config *Config) {
 			config.Security.RateLimit.BurstSize = burst
 		}
 	}
+}
 
-	// Security configuration - Admin
-	if adminEnabled := os.Getenv("ADMIN_ENDPOINTS_ENABLED"); adminEnabled == "true" {
+func loadAdminEnv(config *Config) {
+	if os.Getenv("ADMIN_ENDPOINTS_ENABLED") == "true" {
 		config.Security.Admin.Enabled = true
 	}
 	if adminAPIKey := os.Getenv("ADMIN_API_KEY"); adminAPIKey != "" {
@@ -444,16 +460,18 @@ func loadEnvVars(config *Config) {
 	if adminIPWhitelist := os.Getenv("ADMIN_IP_WHITELIST"); adminIPWhitelist != "" {
 		config.Security.Admin.IPWhitelist = parseCommaSeparated(adminIPWhitelist)
 	}
-	if adminRequireHTTPS := os.Getenv("ADMIN_REQUIRE_HTTPS"); adminRequireHTTPS == "false" {
+	if os.Getenv("ADMIN_REQUIRE_HTTPS") == "false" {
 		config.Security.Admin.RequireHTTPS = false
 	}
+}
 
-	// Security configuration - Security Headers
-	if securityHeadersEnabled := os.Getenv("SECURITY_HEADERS_ENABLED"); securityHeadersEnabled == "false" {
+func loadSecurityHeadersEnv(config *Config) {
+	if os.Getenv("SECURITY_HEADERS_ENABLED") == "false" {
 		config.Security.SecurityHeaders.Enabled = false
 	}
+}
 
-	// Retry configuration
+func loadRetryEnv(config *Config) {
 	if maxAttempts := os.Getenv("RETRY_MAX_ATTEMPTS"); maxAttempts != "" {
 		if attempts, err := strconv.Atoi(maxAttempts); err == nil && attempts > 0 {
 			config.Retry.MaxAttempts = attempts
@@ -478,99 +496,112 @@ func loadEnvVars(config *Config) {
 
 // Validate validates the configuration and returns an error if invalid
 func (c *Config) Validate() error {
-	var errors []string
+	var errs []string
+	errs = append(errs, validateServerConfig(c)...)
+	errs = append(errs, validateDatabaseConfig(c)...)
+	errs = append(errs, validateEmailConfig(c)...)
+	errs = append(errs, validateFormConfig(c)...)
+	errs = append(errs, validateSecurityConfig(c)...)
+	if len(errs) > 0 {
+		return fmt.Errorf("configuration validation errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
 
-	// Validate server configuration
+func validateServerConfig(c *Config) []string {
+	var errs []string
 	if c.Server.Port == "" {
-		errors = append(errors, "server port is required")
+		errs = append(errs, "server port is required")
 	}
+	return errs
+}
 
-	// Validate database configuration
+func validateDatabaseConfig(c *Config) []string {
+	var errs []string
 	if c.Database.Path == "" {
-		errors = append(errors, "database path is required")
+		errs = append(errs, "database path is required")
 	}
+	return errs
+}
 
-	// Validate email configuration
+func validateEmailConfig(c *Config) []string {
+	var errs []string
 	if c.Email.Provider != "smtp" && c.Email.Provider != "mailersend" {
-		errors = append(errors, "email provider must be 'smtp' or 'mailersend'")
+		errs = append(errs, "email provider must be 'smtp' or 'mailersend'")
+		return errs
 	}
-
 	if c.Email.Provider == "smtp" {
 		if c.Email.SMTP.Host == "" {
-			errors = append(errors, "SMTP host is required when using SMTP provider")
+			errs = append(errs, "SMTP host is required when using SMTP provider")
 		}
 		if c.Email.SMTP.Port == "" {
-			errors = append(errors, "SMTP port is required when using SMTP provider")
+			errs = append(errs, "SMTP port is required when using SMTP provider")
 		}
 		if c.Email.SMTP.From == "" {
-			errors = append(errors, "SMTP from address is required when using SMTP provider")
+			errs = append(errs, "SMTP from address is required when using SMTP provider")
 		}
 	}
-
 	if c.Email.Provider == "mailersend" {
 		if c.Email.MailerSend.APIKey == "" {
-			errors = append(errors, "MailerSend API key is required when using MailerSend provider")
+			errs = append(errs, "MailerSend API key is required when using MailerSend provider")
 		}
 		if c.Email.MailerSend.FromEmail == "" {
-			errors = append(errors, "MailerSend from email is required when using MailerSend provider")
+			errs = append(errs, "MailerSend from email is required when using MailerSend provider")
 		}
 	}
-
-	// Validate template configuration
 	if c.Email.Templates.Directory == "" {
-		errors = append(errors, "templates directory is required")
+		errs = append(errs, "templates directory is required")
 	}
 	if c.Email.Templates.DefaultTemplate == "" {
-		errors = append(errors, "default template is required")
+		errs = append(errs, "default template is required")
 	}
 	if c.Email.Templates.Subject == "" {
-		errors = append(errors, "email subject is required")
+		errs = append(errs, "email subject is required")
 	}
+	return errs
+}
 
-	// Validate form configuration
+func validateFormConfig(c *Config) []string {
+	var errs []string
 	if c.Form.EmailField == "" {
-		errors = append(errors, "email field name is required")
+		errs = append(errs, "email field name is required")
 	}
 	if c.Form.SuccessMessage == "" {
-		errors = append(errors, "success message is required")
+		errs = append(errs, "success message is required")
 	}
+	return errs
+}
 
-	// Validate reCAPTCHA configuration if enabled
+func validateSecurityConfig(c *Config) []string {
+	var errs []string
 	if c.Security.ReCAPTCHA.Enabled {
 		if c.Security.ReCAPTCHA.SecretKey == "" {
-			errors = append(errors, "reCAPTCHA secret key is required when reCAPTCHA is enabled")
+			errs = append(errs, "reCAPTCHA secret key is required when reCAPTCHA is enabled")
 		}
 		if c.Security.ReCAPTCHA.SiteKey == "" {
-			errors = append(errors, "reCAPTCHA site key is required when reCAPTCHA is enabled")
+			errs = append(errs, "reCAPTCHA site key is required when reCAPTCHA is enabled")
 		}
 	}
-
 	if c.Security.ReCAPTCHA.EnterpriseEnabled {
 		if c.Security.ReCAPTCHA.ProjectID == "" {
-			errors = append(errors, "reCAPTCHA project ID is required when reCAPTCHA Enterprise is enabled")
+			errs = append(errs, "reCAPTCHA project ID is required when reCAPTCHA Enterprise is enabled")
 		}
 		if c.Security.ReCAPTCHA.SiteKey == "" {
-			errors = append(errors, "reCAPTCHA site key is required when reCAPTCHA Enterprise is enabled")
+			errs = append(errs, "reCAPTCHA site key is required when reCAPTCHA Enterprise is enabled")
 		}
 	}
-
 	if c.Security.Turnstile.Enabled {
 		if c.Security.Turnstile.SecretKey == "" {
-			errors = append(errors, "Turnstile secret key is required when Turnstile is enabled")
+			errs = append(errs, "Turnstile secret key is required when Turnstile is enabled")
 		}
 		if c.Security.Turnstile.SiteKey == "" {
-			errors = append(errors, "Turnstile site key is required when Turnstile is enabled")
+			errs = append(errs, "Turnstile site key is required when Turnstile is enabled")
 		}
 	}
 	if (c.Security.ReCAPTCHA.Enabled || c.Security.ReCAPTCHA.EnterpriseEnabled) && c.Security.Turnstile.Enabled {
-		errors = append(errors, "Only one CAPTCHA system (reCAPTCHA or Turnstile) can be enabled at a time")
+		errs = append(errs, "Only one CAPTCHA system (reCAPTCHA or Turnstile) can be enabled at a time")
 	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("configuration validation errors: %s", strings.Join(errors, "; "))
-	}
-
-	return nil
+	return errs
 }
 
 // GetDatabaseConfig returns the database configuration

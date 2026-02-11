@@ -30,165 +30,175 @@ func SubmitHandler(repo *database.Repository, cfg *config.Config) http.HandlerFu
 	return func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
 		requestID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-		// Increment total submission requests counter
 		metrics.SignupRequestsTotal.Inc()
-
-		// Log request details
 		log.Printf("[%s] Request received: %s %s from %s",
 			requestID, r.Method, r.URL.Path, r.RemoteAddr)
 
-		// 1. Validate Method
-		if r.Method != http.MethodPost {
-			WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed, nil)
-			log.Printf("[%s] Method not allowed: %s for path %s", requestID, r.Method, r.URL.Path)
-			metrics.IncrementSignupFailure("method_not_allowed")
+		if !submitValidateMethod(w, r, requestID) {
 			return
 		}
 
-		// 2. Validate and parse request
-		options := forms.DefaultRequestValidationOptions()
-
-		// Set max request size from config if available
-		if cfg.Form.MaxRequestSize > 0 {
-			options.MaxBodySize = cfg.Form.MaxRequestSize
-		}
-
-		var req SubmitRequest
-		if err := forms.ValidateJSONRequest(r, options, &req); err != nil {
-			WriteJSONError(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest, nil)
-			log.Printf("[%s] Invalid request: %v", requestID, err)
-			metrics.IncrementSignupFailure("invalid_request")
+		req, ok := submitParseRequest(w, r, cfg, requestID)
+		if !ok {
 			return
 		}
 
-		// 3. Validate Form Data
 		validator := forms.NewValidator(cfg)
-
-		// Sanitize input data
 		req.FormData = validator.SanitizeSubmission(req.FormData)
-
-		// Validate form data using form-type-specific validation
-		validationErrors, err := validator.ValidateFormByType(req.FormData)
-		if err != nil {
-			WriteJSONError(w, "Validation failed", http.StatusBadRequest, validationErrors)
-			log.Printf("[%s] Validation failed: %v", requestID, validationErrors)
-			metrics.IncrementSignupFailure("validation_failed")
+		if !submitValidateForm(w, req, validator, requestID) {
 			return
 		}
 
-		// Get email from form data for logging (handle different form types)
 		email := getEmailFromFormData(req.FormData, cfg.Form.EmailField)
-
 		log.Printf("[%s] Processing form submission with email: %s", requestID, email)
 
-		// 4. Verify reCAPTCHA token if enabled
-		if cfg.Security.ReCAPTCHA.Enabled || cfg.Security.ReCAPTCHA.EnterpriseEnabled {
-			if !VerifyRecaptchaToken(w, r, cfg, req.RecaptchaToken, requestID) {
-				return
-			}
-		}
-		// 4b. Verify Turnstile token if enabled
-		if cfg.Security.Turnstile.Enabled {
-			if !VerifyTurnstileToken(w, r, cfg, req.TurnstileToken, requestID) {
-				return
-			}
-		}
-
-		// 5. Check if submission with this email already exists
-		if email != "" {
-			// Determine the email field based on form type
-			formType := getFormType(req.FormData)
-			var emailField string
-			switch formType {
-			case "business_contact":
-				emailField = "work_email"
-			default:
-				emailField = cfg.Form.EmailField
-			}
-
-			_, err := repo.Submissions.GetByEmail(email, emailField)
-			if err == nil {
-				// Email already exists
-				WriteJSONError(w, "Email already registered", http.StatusConflict, nil)
-				log.Printf("[%s] Email already registered: %s", requestID, email)
-				metrics.IncrementSignupFailure("email_already_exists")
-				return
-			} else if err.Error() != fmt.Sprintf("submission not found for email: %s", email) {
-				// Other database error during check
-				log.Printf("[%s] Error checking submission %s: %v", requestID, email, err)
-				WriteJSONError(w, "Failed to check registration status", http.StatusInternalServerError, nil)
-				metrics.IncrementSignupFailure("db_error")
-				return
-			}
-		}
-
-		// 6. Add submission to database
-		submission := &models.Submission{
-			FormData:  req.FormData,
-			Status:    "pending",
-			FormType:  getFormType(req.FormData),
-			Source:    "api",
-			IPAddress: getClientIP(r),
-			UserAgent: r.UserAgent(),
-			Referrer:  r.Referer(),
-		}
-
-		if err := repo.Submissions.Create(submission); err != nil {
-			log.Printf("Error adding submission: %v", err)
-			WriteJSONError(w, "Failed to process submission", http.StatusInternalServerError, nil)
-			metrics.IncrementSignupFailure("db_error")
+		if !submitVerifyCaptcha(w, r, cfg, req, requestID) {
 			return
 		}
 
-		submissionID := submission.ID
-
-		// 7. Send email if email field is present
-		emailSent := false
-		if email != "" {
-			// Try to send email with retry logic
-			retryConfig := retry.DefaultRetryConfig()
-			retryConfig.MaxAttempts = 2 // Limit to 2 attempts for immediate processing
-			retryConfig.InitialDelay = 500 * time.Millisecond
-
-			err := retry.ExecuteWithRetry(retryConfig, func() error {
-				return sendEmailWithRetryableError(cfg, email, req.FormData)
-			}, fmt.Sprintf("email for submission %s", submissionID))
-
-			if err != nil {
-				log.Printf("Error sending email to %s: %v", email, err)
-				log.Printf("Submission %s will remain pending for background processing", submissionID)
-				// Don't fail the request if email sending fails - it will be retried by background job
-			} else {
-				emailSent = true
-			}
+		if !submitCheckEmailExists(w, repo, req.FormData, email, cfg.Form.EmailField, requestID) {
+			return
 		}
 
-		// 8. Update submission status only if email was sent successfully
+		submission, ok := submitCreateSubmission(w, repo, req.FormData, r, requestID)
+		if !ok {
+			return
+		}
+
+		emailSent := submitTrySendEmail(cfg, email, req.FormData, submission.ID)
+
 		if emailSent {
-			if err := repo.Submissions.MarkProcessed(submissionID); err != nil {
-				log.Printf("Failed to update status for submission %s: %v", submissionID, err)
-				// Continue successfully even if status update fails
+			if err := repo.Submissions.MarkProcessed(submission.ID); err != nil {
+				log.Printf("Failed to update status for submission %s: %v", submission.ID, err)
 			}
 		} else {
-			log.Printf("Submission %s remains pending - will be processed by background job", submissionID)
+			log.Printf("Submission %s remains pending - will be processed by background job", submission.ID)
 		}
 
-		// 9. Return Success Response
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(ErrorResponse{
-			Success: true,
-			Message: cfg.Form.SuccessMessage,
-		}); err != nil {
-			log.Printf("Failed to encode success response: %v", err)
-		}
-
-		// Increment successful submission counter
+		submitWriteSuccess(w, cfg)
 		metrics.SignupSuccessTotal.Inc()
+		log.Printf("[%s] Successfully processed submission. Duration: %v", requestID, time.Since(startTime))
+	}
+}
 
-		duration := time.Since(startTime)
-		log.Printf("[%s] Successfully processed submission. Duration: %v", requestID, duration)
+func submitValidateMethod(w http.ResponseWriter, r *http.Request, requestID string) bool {
+	if r.Method == http.MethodPost {
+		return true
+	}
+	WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed, nil)
+	log.Printf("[%s] Method not allowed: %s for path %s", requestID, r.Method, r.URL.Path)
+	metrics.IncrementSignupFailure("method_not_allowed")
+	return false
+}
+
+func submitParseRequest(w http.ResponseWriter, r *http.Request, cfg *config.Config, requestID string) (*SubmitRequest, bool) {
+	options := forms.DefaultRequestValidationOptions()
+	if cfg.Form.MaxRequestSize > 0 {
+		options.MaxBodySize = cfg.Form.MaxRequestSize
+	}
+	var req SubmitRequest
+	if err := forms.ValidateJSONRequest(r, options, &req); err != nil {
+		WriteJSONError(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest, nil)
+		log.Printf("[%s] Invalid request: %v", requestID, err)
+		metrics.IncrementSignupFailure("invalid_request")
+		return nil, false
+	}
+	return &req, true
+}
+
+func submitValidateForm(w http.ResponseWriter, req *SubmitRequest, validator *forms.Validator, requestID string) bool {
+	validationErrors, err := validator.ValidateFormByType(req.FormData)
+	if err != nil {
+		WriteJSONError(w, "Validation failed", http.StatusBadRequest, validationErrors)
+		log.Printf("[%s] Validation failed: %v", requestID, validationErrors)
+		metrics.IncrementSignupFailure("validation_failed")
+		return false
+	}
+	return true
+}
+
+func submitVerifyCaptcha(w http.ResponseWriter, r *http.Request, cfg *config.Config, req *SubmitRequest, requestID string) bool {
+	if cfg.Security.ReCAPTCHA.Enabled || cfg.Security.ReCAPTCHA.EnterpriseEnabled {
+		if !VerifyRecaptchaToken(w, r, cfg, req.RecaptchaToken, requestID) {
+			return false
+		}
+	}
+	if cfg.Security.Turnstile.Enabled && !VerifyTurnstileToken(w, r, cfg, req.TurnstileToken, requestID) {
+		return false
+	}
+	return true
+}
+
+func submitCheckEmailExists(w http.ResponseWriter, repo *database.Repository, formData map[string]interface{}, email, defaultEmailField, requestID string) bool {
+	if email == "" {
+		return true
+	}
+	formType := getFormType(formData)
+	emailField := defaultEmailField
+	if formType == "business_contact" {
+		emailField = "work_email"
+	}
+	_, err := repo.Submissions.GetByEmail(email, emailField)
+	if err == nil {
+		WriteJSONError(w, "Email already registered", http.StatusConflict, nil)
+		log.Printf("[%s] Email already registered: %s", requestID, email)
+		metrics.IncrementSignupFailure("email_already_exists")
+		return false
+	}
+	if err.Error() != fmt.Sprintf("submission not found for email: %s", email) {
+		log.Printf("[%s] Error checking submission %s: %v", requestID, email, err)
+		WriteJSONError(w, "Failed to check registration status", http.StatusInternalServerError, nil)
+		metrics.IncrementSignupFailure("db_error")
+		return false
+	}
+	return true
+}
+
+func submitCreateSubmission(w http.ResponseWriter, repo *database.Repository, formData map[string]interface{}, r *http.Request, requestID string) (*models.Submission, bool) {
+	submission := &models.Submission{
+		FormData:  formData,
+		Status:    "pending",
+		FormType:  getFormType(formData),
+		Source:    "api",
+		IPAddress: getClientIP(r),
+		UserAgent: r.UserAgent(),
+		Referrer:  r.Referer(),
+	}
+	if err := repo.Submissions.Create(submission); err != nil {
+		log.Printf("Error adding submission: %v", err)
+		WriteJSONError(w, "Failed to process submission", http.StatusInternalServerError, nil)
+		metrics.IncrementSignupFailure("db_error")
+		return nil, false
+	}
+	return submission, true
+}
+
+func submitTrySendEmail(cfg *config.Config, email string, formData map[string]interface{}, submissionID string) bool {
+	if email == "" {
+		return false
+	}
+	retryConfig := retry.DefaultRetryConfig()
+	retryConfig.MaxAttempts = 2
+	retryConfig.InitialDelay = 500 * time.Millisecond
+	err := retry.ExecuteWithRetry(retryConfig, func() error {
+		return sendEmailWithRetryableError(cfg, email, formData)
+	}, fmt.Sprintf("email for submission %s", submissionID))
+	if err != nil {
+		log.Printf("Error sending email to %s: %v", email, err)
+		log.Printf("Submission %s will remain pending for background processing", submissionID)
+		return false
+	}
+	return true
+}
+
+func submitWriteSuccess(w http.ResponseWriter, cfg *config.Config) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
+		Success: true,
+		Message: cfg.Form.SuccessMessage,
+	}); err != nil {
+		log.Printf("Failed to encode success response: %v", err)
 	}
 }
 

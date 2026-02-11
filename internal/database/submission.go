@@ -219,112 +219,32 @@ func (db *SQLiteDB) UpdateSubmissionStatus(id string, status string) error {
 
 // ListSubmissions retrieves all submissions, optionally filtered by status
 func (db *SQLiteDB) ListSubmissions(status string) ([]*models.Submission, error) {
-	var query string
-	var rows *sql.Rows
-	var err error
+	rows, err := db.querySubmissionsByStatus(status)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return db.scanSubmissions(rows)
+}
 
-	if status == "" {
-		query = `
-        SELECT id, form_data, status, form_type, source, ip_address, user_agent, 
+func (db *SQLiteDB) querySubmissionsByStatus(status string) (*sql.Rows, error) {
+	baseQuery := `
+        SELECT id, form_data, status, form_type, source, ip_address, user_agent,
                referrer, session_id, created_at, updated_at, processed_at
         FROM submissions
         ORDER BY created_at DESC
         `
-		rows, err = db.db.Query(query)
-	} else {
-		query = `
-        SELECT id, form_data, status, form_type, source, ip_address, user_agent, 
+	if status == "" {
+		return db.db.Query(baseQuery)
+	}
+	query := `
+        SELECT id, form_data, status, form_type, source, ip_address, user_agent,
                referrer, session_id, created_at, updated_at, processed_at
         FROM submissions
         WHERE status = ?
         ORDER BY created_at DESC
         `
-		rows, err = db.db.Query(query, status)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to query submissions: %w", err)
-	}
-	defer rows.Close()
-
-	var submissions []*models.Submission
-	for rows.Next() {
-		var submission models.Submission
-		var formDataJSON []byte
-		var createdAtStr, updatedAtStr string
-		var formType, source, ipAddress, userAgent, referrer, sessionID sql.NullString
-		var processedAtStr sql.NullString
-
-		err := rows.Scan(
-			&submission.ID,
-			&formDataJSON,
-			&submission.Status,
-			&formType,
-			&source,
-			&ipAddress,
-			&userAgent,
-			&referrer,
-			&sessionID,
-			&createdAtStr,
-			&updatedAtStr,
-			&processedAtStr,
-		)
-
-		if err != nil {
-			log.Printf("ERROR: Failed to scan submission row: %v", err)
-			continue
-		}
-
-		// Parse form data JSON
-		if err = json.Unmarshal(formDataJSON, &submission.FormData); err != nil {
-			log.Printf("ERROR: Failed to unmarshal form data: %v", err)
-			continue
-		}
-
-		// Parse timestamps
-		createdAt, err := time.Parse(time.RFC3339, createdAtStr)
-		if err != nil {
-			createdAt, _ = time.Parse("2006-01-02 15:04:05", createdAtStr)
-		}
-		submission.CreatedAt = createdAt
-
-		updatedAt, err := time.Parse(time.RFC3339, updatedAtStr)
-		if err != nil {
-			updatedAt, _ = time.Parse("2006-01-02 15:04:05", updatedAtStr)
-		}
-		submission.UpdatedAt = updatedAt
-
-		// Handle nullable fields
-		if formType.Valid {
-			submission.FormType = formType.String
-		}
-		if source.Valid {
-			submission.Source = source.String
-		}
-		if ipAddress.Valid {
-			submission.IPAddress = ipAddress.String
-		}
-		if userAgent.Valid {
-			submission.UserAgent = userAgent.String
-		}
-		if referrer.Valid {
-			submission.Referrer = referrer.String
-		}
-		if sessionID.Valid {
-			submission.SessionID = sessionID.String
-		}
-		if processedAtStr.Valid {
-			processedAt, err := time.Parse(time.RFC3339, processedAtStr.String)
-			if err != nil {
-				processedAt, _ = time.Parse("2006-01-02 15:04:05", processedAtStr.String)
-			}
-			submission.ProcessedAt = &processedAt
-		}
-
-		submissions = append(submissions, &submission)
-	}
-
-	return submissions, nil
+	return db.db.Query(query, status)
 }
 
 // RemoveSubmission removes a submission by ID

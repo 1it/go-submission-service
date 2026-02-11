@@ -39,19 +39,23 @@ func printUsage() {
 	fmt.Println("  --form-type      Filter submissions by form_type (business_contact, …)")
 }
 
+// cliCmd defines a CLI command and its runner
+type cliCmd struct {
+	minArgs int
+	run     func(args []string, repo *database.Repository, db *database.SQLiteDB, status, formType string)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
 func main() {
 	setupLogging()
 
-	// CLI flags
 	dbPathFlag := flag.String("database-path", "", "Path to the SQLite database file")
 	statusFlag := flag.String("status", "", "Filter by status")
 	formTypeFlag := flag.String("form-type", "", "Filter submissions by form type")
 	flag.Parse()
 
-	// Command (first arg after flags)
 	args := flag.Args()
 	if len(args) == 0 {
 		printUsage()
@@ -59,7 +63,6 @@ func main() {
 	}
 	cmd := args[0]
 
-	// Load config to obtain default DB path
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config load: %v", err)
@@ -76,50 +79,84 @@ func main() {
 	defer db.Close()
 	repo := db.GetRepository()
 
-	// Dispatch
-	switch cmd {
-	// ───────── LIST ────────────────────────────────────────────────
-	case "list", "list-subscribers":
-		listSubscribers(repo, *statusFlag)
-	case "list-submissions":
-		listSubmissions(repo, *statusFlag, *formTypeFlag)
-
-	// ───────── STATS ───────────────────────────────────────────────
-	case "stats", "stats-subscribers":
-		showSubscriberStats(repo)
-	case "stats-submissions":
-		showSubmissionStats(repo)
-
-	// ───────── REMOVE ──────────────────────────────────────────────
-	case "remove", "remove-subscriber":
-		if len(args) < 2 {
-			log.Fatal("Email required")
+	commands := getCLICommands()
+	if c, ok := commands[cmd]; ok {
+		if len(args) < c.minArgs {
+			switch cmd {
+			case "remove", "remove-subscriber", "remove-submission":
+				log.Fatal("Email required")
+			case "migrate-to":
+				log.Fatal("Version required")
+			default:
+				log.Fatal("Arguments required")
+			}
+			return
 		}
-		removeSubscriber(repo, args[1])
-	case "remove-submission":
-		if len(args) < 2 {
-			log.Fatal("Email required")
-		}
-		removeSubmission(repo, args[1])
-
-	// ───────── MISC ────────────────────────────────────────────────
-	case "config-docs":
-		fmt.Println(config.GenerateConfigDocs())
-	case "migrate":
-		runMigrations(db)
-	case "migrate-status":
-		showMigrationStatus(db)
-	case "migrate-to":
-		if len(args) < 2 {
-			log.Fatal("Version required")
-		}
-		migrateToVersion(db, args[1])
-
-	default:
-		fmt.Printf("Unknown command: %s\n", cmd)
-		printUsage()
-		os.Exit(1)
+		c.run(args, repo, db, *statusFlag, *formTypeFlag)
+		return
 	}
+
+	fmt.Printf("Unknown command: %s\n", cmd)
+	printUsage()
+	os.Exit(1)
+}
+
+func getCLICommands() map[string]cliCmd {
+	return map[string]cliCmd{
+		"list":             {0, runListSubscribers},
+		"list-subscribers": {0, runListSubscribers},
+		"list-submissions": {0, runListSubmissions},
+		"stats":            {0, runStatsSubscribers},
+		"stats-subscribers": {0, runStatsSubscribers},
+		"stats-submissions": {0, runStatsSubmissions},
+		"remove":            {2, runRemoveSubscriber},
+		"remove-subscriber": {2, runRemoveSubscriber},
+		"remove-submission": {2, runRemoveSubmission},
+		"config-docs":       {0, runConfigDocs},
+		"migrate":           {0, runMigrationsCmd},
+		"migrate-status":    {0, runMigrationStatus},
+		"migrate-to":        {2, runMigrateTo},
+	}
+}
+
+func runListSubscribers(args []string, repo *database.Repository, _ *database.SQLiteDB, status, _ string) {
+	listSubscribers(repo, status)
+}
+
+func runListSubmissions(args []string, repo *database.Repository, _ *database.SQLiteDB, status, formType string) {
+	listSubmissions(repo, status, formType)
+}
+
+func runStatsSubscribers(args []string, repo *database.Repository, _ *database.SQLiteDB, _, _ string) {
+	showSubscriberStats(repo)
+}
+
+func runStatsSubmissions(args []string, repo *database.Repository, _ *database.SQLiteDB, _, _ string) {
+	showSubmissionStats(repo)
+}
+
+func runRemoveSubscriber(args []string, repo *database.Repository, _ *database.SQLiteDB, _, _ string) {
+	removeSubscriber(repo, args[1])
+}
+
+func runRemoveSubmission(args []string, repo *database.Repository, _ *database.SQLiteDB, _, _ string) {
+	removeSubmission(repo, args[1])
+}
+
+func runConfigDocs(args []string, _ *database.Repository, _ *database.SQLiteDB, _, _ string) {
+	fmt.Println(config.GenerateConfigDocs())
+}
+
+func runMigrationsCmd(args []string, _ *database.Repository, db *database.SQLiteDB, _, _ string) {
+	runMigrations(db)
+}
+
+func runMigrationStatus(args []string, _ *database.Repository, db *database.SQLiteDB, _, _ string) {
+	showMigrationStatus(db)
+}
+
+func runMigrateTo(args []string, _ *database.Repository, db *database.SQLiteDB, _, _ string) {
+	migrateToVersion(db, args[1])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
