@@ -165,7 +165,7 @@ func (db *SQLiteDB) ApplyMigration(migration Migration) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Execute migration SQL
 	statements := strings.Split(migration.Up, ";")
@@ -208,7 +208,7 @@ func (db *SQLiteDB) RollbackMigration(migration Migration) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Execute rollback SQL
 	statements := strings.Split(migration.Down, ";")

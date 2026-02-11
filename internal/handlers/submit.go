@@ -177,10 +177,12 @@ func SubmitHandler(repo *database.Repository, cfg *config.Config) http.HandlerFu
 		// 9. Return Success Response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		if err := json.NewEncoder(w).Encode(ErrorResponse{
 			Success: true,
 			Message: cfg.Form.SuccessMessage,
-		})
+		}); err != nil {
+			log.Printf("Failed to encode success response: %v", err)
+		}
 
 		// Increment successful submission counter
 		metrics.SignupSuccessTotal.Inc()
@@ -370,5 +372,7 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode health response: %v", err)
+	}
 }

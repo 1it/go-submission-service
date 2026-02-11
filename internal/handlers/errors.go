@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -16,9 +17,11 @@ type ErrorResponse struct {
 func WriteJSONError(w http.ResponseWriter, message string, statusCode int, validationErrors map[string]string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
 		Success: false,
 		Message: message,
 		Errors:  validationErrors,
-	})
+	}); err != nil {
+		log.Printf("Failed to encode error response: %v", err)
+	}
 }

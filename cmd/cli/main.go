@@ -162,7 +162,10 @@ func removeSubscriber(repo *database.Repository, email string) {
 	}
 	fmt.Printf("Remove subscriber %s (status %s)? [y/N]: ", sub.Email, sub.Status)
 	var c string
-	fmt.Scanln(&c)
+	if _, err := fmt.Scanln(&c); err != nil {
+		log.Printf("Error reading input: %v", err)
+		return
+	}
 	if c != "y" && c != "Y" {
 		return
 	}
@@ -229,7 +232,10 @@ func removeSubmission(repo *database.Repository, email string) {
 	}
 	fmt.Printf("Remove submission %s (status %s, form_type %s)? [y/N]: ", dispEmail, sub.Status, sub.FormType)
 	var c string
-	fmt.Scanln(&c)
+	if _, err := fmt.Scanln(&c); err != nil {
+		log.Printf("Error reading input: %v", err)
+		return
+	}
 	if c != "y" && c != "Y" {
 		return
 	}

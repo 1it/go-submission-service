@@ -128,7 +128,9 @@ func AdminListSubmissionsHandler(repo *database.Repository, cfg *config.Config) 
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Failed to encode response: %v", err)
+		}
 	}
 }
 
@@ -150,7 +152,9 @@ func AdminGetSubmissionHandler(repo *database.Repository, cfg *config.Config) ht
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(submission)
+		if err := json.NewEncoder(w).Encode(submission); err != nil {
+			log.Printf("Failed to encode submission: %v", err)
+		}
 	}
 }
 
@@ -201,7 +205,9 @@ func AdminUpdateSubmissionStatusHandler(repo *database.Repository, cfg *config.C
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(submission)
+		if err := json.NewEncoder(w).Encode(submission); err != nil {
+			log.Printf("Failed to encode submission: %v", err)
+		}
 	}
 }
 
@@ -264,7 +270,9 @@ func AdminStatsHandler(repo *database.Repository, cfg *config.Config) http.Handl
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Failed to encode stats response: %v", err)
+		}
 	}
 }
 
@@ -338,7 +346,9 @@ func AdminHealthHandler(repo *database.Repository, cfg *config.Config) http.Hand
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("Failed to encode health response: %v", err)
+		}
 	}
 }
 

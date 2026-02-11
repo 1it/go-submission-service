@@ -119,7 +119,9 @@ func (jp *JobProcessor) processSubmission(submission *models.Submission) bool {
 	email := jp.getEmailFromSubmission(submission)
 	if email == "" {
 		log.Printf("No email found in submission %s, marking as failed", submission.ID)
-		jp.repo.Submissions.UpdateStatus(submission.ID, "failed")
+		if err := jp.repo.Submissions.UpdateStatus(submission.ID, "failed"); err != nil {
+			log.Printf("Failed to update status for submission %s: %v", submission.ID, err)
+		}
 		return false
 	}
 
@@ -134,12 +136,16 @@ func (jp *JobProcessor) processSubmission(submission *models.Submission) bool {
 
 		// Mark as failed if we've exceeded retry attempts
 		if jp.shouldMarkAsFailed(submission) {
-			jp.repo.Submissions.UpdateStatus(submission.ID, "failed")
+			if err := jp.repo.Submissions.UpdateStatus(submission.ID, "failed"); err != nil {
+				log.Printf("Failed to update status for submission %s: %v", submission.ID, err)
+			}
 			log.Printf("Marked submission %s as failed after multiple retry attempts", submission.ID)
 		}
 	} else {
 		// Mark as processed
-		jp.repo.Submissions.MarkProcessed(submission.ID)
+		if err := jp.repo.Submissions.MarkProcessed(submission.ID); err != nil {
+			log.Printf("Failed to mark submission %s as processed: %v", submission.ID, err)
+		}
 		log.Printf("Successfully processed pending submission: %s", submission.ID)
 		success = true
 	}
