@@ -1,0 +1,87 @@
+services:
+  form-submission-service:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - data:/app/data
+    environment:
+      # --- Server Config ---
+      - PORT=8080
+      - HOST=0.0.0.0
+      
+      # --- Database Config ---
+      - DB_PATH=/app/data/submissions.db
+      
+      # --- Email Config (Use MailHog for local dev) ---
+      - EMAIL_PROVIDER=smtp
+      - SMTP_HOST=mailhog # Service name in this docker-compose file
+      - SMTP_PORT=1025    # MailHog default SMTP port
+      - SMTP_USERNAME=    # MailHog doesn't require auth
+      - SMTP_PASSWORD=
+      - SMTP_FROM=noreply@example.com # From address for local tests
+      
+      # --- Template Config ---
+      - TEMPLATES_DIR=/app/templates
+      - DEFAULT_TEMPLATE=form_submission.html
+      - EMAIL_SUBJECT=Form Submission Received
+      - ADMIN_EMAIL=admin@example.com
+      
+      # --- Form Config ---
+      - EMAIL_FIELD=email
+      - SUCCESS_MESSAGE=Thank you for your submission!
+      - MAX_REQUEST_SIZE=1048576
+      - DISABLE_HTML_ESCAPING=false
+      - DISABLE_HTML_TAG_REMOVAL=false
+      
+      # --- Security Config ---
+      - CORS_ALLOWED_ORIGINS=*
+      - RECAPTCHA_ENABLED=false
+      - RECAPTCHA_ACTION_NAME=form_submit
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-test-admin-key-12345}
+      - ADMIN_ENDPOINTS_ENABLED=${ADMIN_ENDPOINTS_ENABLED:-true}
+      - ADMIN_PATH_PREFIX=${ADMIN_PATH_PREFIX:-mgmt}
+
+      # --- Turnstile Config ---
+      - TURNSTILE_ENABLED=true
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-1x0000000000000000000000000000000AA}
+      - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-1x00000000000000000000AAAA}
+      
+      # --- Retry Config ---
+      - RETRY_MAX_ATTEMPTS=3
+      - RETRY_INITIAL_DELAY_MS=1000
+      - RETRY_MAX_DELAY_MS=30000
+      - RETRY_BACKOFF_FACTOR=2.0
+
+      # --- Uncomment for MailerSend (if using instead of MailHog) ---
+      # - EMAIL_PROVIDER=mailersend
+      # - MAILERSEND_API_KEY=your_mailersend_api_key
+      # - MAILERSEND_FROM_EMAIL=noreply@example.com
+      # - MAILERSEND_FROM_NAME=Form Submission Service
+
+    depends_on:
+      mailhog:
+        condition: service_healthy
+    networks:
+      - form-submission-net
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025" # SMTP server
+      - "8025:8025" # Web UI / API
+    networks:
+      - form-submission-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025/api/v2/messages"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  form-submission-net:
+    driver: bridge
+
+volumes:
+  data:

@@ -1,0 +1,574 @@
+openapi: 3.0.3
+info:
+  title: Go Submission Service - Admin API
+  description: |
+    Admin API for managing form submissions in the Go Submission Service.
+    
+    All admin endpoints require authentication via API key in the `X-API-Key` header
+    or as a Bearer token in the `Authorization` header.
+    
+    ## Authentication
+    
+    Admin endpoints are protected by API key authentication. Include your API key in one of these ways:
+    
+    - Header: `X-API-Key: your-api-key`
+    - Header: `Authorization: Bearer your-api-key`
+    
+    ## Rate Limiting
+    
+    Admin endpoints are subject to the same rate limiting as public endpoints.
+    Rate limit headers are included in responses:
+    
+    - `X-RateLimit-Limit`: Maximum requests per minute
+    - `X-RateLimit-Remaining`: Remaining requests in current window
+    - `X-RateLimit-Reset`: Unix timestamp when rate limit resets
+    
+  version: 1.0.0
+  contact:
+    name: Go Submission Service
+    url: https://github.com/1it/go-submission-service
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://your-domain.com
+    description: Production server
+
+paths:
+  /admin/submissions:
+    get:
+      summary: List form submissions
+      description: |
+        Retrieve a paginated list of form submissions with optional filtering.
+        
+        Supports filtering by status, form type, source, and date range.
+        Results are ordered by creation date (newest first) by default.
+      tags:
+        - Admin - Submissions
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page (max 1000)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+        - name: status
+          in: query
+          description: Filter by submission status
+          schema:
+            type: string
+            enum: [pending, processed, failed, archived]
+        - name: form_type
+          in: query
+          description: Filter by form type
+          schema:
+            type: string
+        - name: source
+          in: query
+          description: Filter by submission source
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          description: Filter submissions from this date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: Filter submissions until this date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSubmissionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/submissions/{id}:
+    get:
+      summary: Get submission by ID
+      description: Retrieve a specific form submission by its ID.
+      tags:
+        - Admin - Submissions
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Submission ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    
+    delete:
+      summary: Delete submission
+      description: Permanently delete a form submission. This action cannot be undone.
+      tags:
+        - Admin - Submissions
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Submission ID
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Submission deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/submissions/{id}/status:
+    patch:
+      summary: Update submission status
+      description: Update the status of a specific form submission.
+      tags:
+        - Admin - Submissions
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Submission ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending, processed, failed, archived]
+                  description: New status for the submission
+            example:
+              status: processed
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/stats:
+    get:
+      summary: Get submission statistics
+      description: |
+        Retrieve comprehensive statistics about form submissions.
+        
+        Includes overall counts, breakdown by form type, and available form types.
+      tags:
+        - Admin - Analytics
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/health:
+    get:
+      summary: Enhanced health check
+      description: |
+        Comprehensive health check including service status, dependencies,
+        and basic metrics. More detailed than the public health endpoint.
+      tags:
+        - Admin - Monitoring
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHealthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: Service is unhealthy or degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHealthResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Admin API key for authentication
+
+  schemas:
+    Submission:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique submission identifier
+        form_type:
+          type: string
+          description: Type of form submitted
+        form_data:
+          type: object
+          description: Form data as key-value pairs
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, processed, failed, archived]
+          description: Current processing status
+        source:
+          type: string
+          description: Source of the submission
+        ip_address:
+          type: string
+          description: IP address of the submitter
+        user_agent:
+          type: string
+          description: User agent of the submitter
+        referrer:
+          type: string
+          description: Referrer URL
+        session_id:
+          type: string
+          description: Session identifier
+        created_at:
+          type: string
+          format: date-time
+          description: Submission creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Processing completion timestamp
+      example:
+        id: "1234567890"
+        form_type: "contact"
+        form_data:
+          name: "John Doe"
+          email: "john@example.com"
+          message: "Hello world"
+        status: "processed"
+        source: "website"
+        ip_address: "192.168.1.1"
+        user_agent: "Mozilla/5.0..."
+        referrer: "https://example.com/contact"
+        session_id: "sess_abc123"
+        created_at: "2024-01-15T10:30:00Z"
+        updated_at: "2024-01-15T10:31:00Z"
+        processed_at: "2024-01-15T10:31:00Z"
+
+    AdminSubmissionsResponse:
+      type: object
+      properties:
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Submission'
+        total:
+          type: integer
+          description: Total number of submissions matching filters
+        page:
+          type: integer
+          description: Current page number
+        limit:
+          type: integer
+          description: Number of items per page
+        filters:
+          type: object
+          description: Applied filters
+          additionalProperties:
+            type: string
+      example:
+        submissions: []
+        total: 150
+        page: 1
+        limit: 50
+        filters:
+          status: "processed"
+          form_type: "contact"
+          start_date: "2024-01-01"
+          end_date: "2024-01-31"
+
+    AdminStatsResponse:
+      type: object
+      properties:
+        overall:
+          type: object
+          description: Overall submission statistics
+          additionalProperties:
+            type: integer
+        by_form_type:
+          type: object
+          description: Statistics broken down by form type
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+        form_types:
+          type: array
+          items:
+            type: string
+          description: List of available form types
+        generated_at:
+          type: string
+          format: date-time
+          description: When these statistics were generated
+      example:
+        overall:
+          total: 1500
+          pending: 25
+          processed: 1400
+          failed: 50
+          archived: 25
+        by_form_type:
+          contact:
+            total: 800
+            pending: 10
+            processed: 750
+            failed: 30
+            archived: 10
+          newsletter:
+            total: 700
+            pending: 15
+            processed: 650
+            failed: 20
+            archived: 15
+        form_types: ["contact", "newsletter", "beta_signup"]
+        generated_at: "2024-01-15T10:30:00Z"
+
+    AdminHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+          description: Overall service status
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        service:
+          type: string
+          description: Service name
+        version:
+          type: string
+          description: Service version
+        uptime:
+          type: string
+          description: Service uptime in seconds
+        dependencies:
+          type: object
+          description: Status of service dependencies
+          additionalProperties: true
+        metrics:
+          type: object
+          description: Basic service metrics
+          additionalProperties: true
+      example:
+        status: "ok"
+        timestamp: "2024-01-15T10:30:00Z"
+        service: "go-submission-service"
+        version: "1.0.0"
+        uptime: "86400s"
+        dependencies:
+          database:
+            status: "ok"
+            type: "sqlite"
+            path: "/data/submissions.db"
+          email:
+            provider: "smtp"
+            status: "configured"
+        metrics:
+          submissions:
+            total: 1500
+            pending: 25
+          uptime_seconds: 86400
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code (optional)
+        details:
+          type: object
+          description: Additional error details (optional)
+          additionalProperties: true
+      example:
+        error: "Invalid API key"
+        code: "INVALID_API_KEY"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid status. Must be one of: pending, processed, failed, archived"
+    
+    Unauthorized:
+      description: Unauthorized - API key required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "API key required for admin endpoints"
+    
+    Forbidden:
+      description: Forbidden - invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid API key"
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Submission not found"
+    
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+        X-RateLimit-Limit:
+          description: Maximum requests per minute
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          description: Remaining requests in current window
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          description: Unix timestamp when rate limit resets
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Rate limit exceeded. Please try again later."
+    
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Internal server error"
+
+tags:
+  - name: Admin - Submissions
+    description: Manage form submissions
+  - name: Admin - Analytics
+    description: View submission statistics and analytics
+  - name: Admin - Monitoring
+    description: Service health and monitoring endpoints

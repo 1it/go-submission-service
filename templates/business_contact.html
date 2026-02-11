@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Contact Form Submission</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #007bff;
+            margin: 0;
+            font-size: 28px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .field-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 5px;
+        }
+        .field-label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .field-value {
+            color: #212529;
+            font-size: 16px;
+        }
+        .company-size {
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            display: inline-block;
+            font-weight: bold;
+            color: #1565c0;
+        }
+        .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .timestamp {
+            background-color: #f1f3f4;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #5f6368;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>New Business Contact</h1>
+            <p>A new business contact form has been submitted</p>
+        </div>
+        
+        <div class="content">
+            <div class="field-group">
+                <span class="field-label">Full Name:</span>
+                <div class="field-value">{{.full_name}}</div>
+            </div>
+            
+            <div class="field-group">
+                <span class="field-label">Work Email:</span>
+                <div class="field-value">{{.work_email}}</div>
+            </div>
+            
+            <div class="field-group">
+                <span class="field-label">Company:</span>
+                <div class="field-value">{{.company}}</div>
+            </div>
+            
+            <div class="field-group">
+                <span class="field-label">Company Size:</span>
+                <div class="field-value">
+                    <span class="company-size">{{.company_size}} employees</span>
+                </div>
+            </div>
+            
+            {{if .message}}
+            <div class="field-group">
+                <span class="field-label">Additional Message:</span>
+                <div class="field-value">{{.message}}</div>
+            </div>
+            {{end}}
+            
+            {{if .phone}}
+            <div class="field-group">
+                <span class="field-label">Phone:</span>
+                <div class="field-value">{{.phone}}</div>
+            </div>
+            {{end}}
+            
+            {{if .job_title}}
+            <div class="field-group">
+                <span class="field-label">Job Title:</span>
+                <div class="field-value">{{.job_title}}</div>
+            </div>
+            {{end}}
+        </div>
+        
+        <div class="timestamp">
+            <strong>Submitted:</strong> {{.timestamp}}
+        </div>
+        
+        <div class="footer">
+            <p>This is an automated message from your form submission service.</p>
+            <p>Please respond to the work email address provided above.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submission Confirmation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+            color: #2c3e50;
+        }
+        .content {
+            padding: 30px 0;
+        }
+        .message {
+            font-size: 16px;
+            color: #212529;
+            margin-bottom: 20px;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+        }
+        .footer {
+            text-align: center;
+            font-size: 14px;
+            color: #6c757d;
+            padding: 20px 0;
+            border-top: 1px solid #eee;
+            margin-top: 30px;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #adb5bd;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">{{ if .subject }}{{ .subject }}{{ else }}Thank You for Your Submission{{ end }}</h1>
+        </div>
+        
+        <div class="content">
+            <div class="message">
+                <p>Thank you for your submission. We have received your information and will process it shortly.</p>
+                
+                {{ if .name }}
+                <p>Hello {{ .name }},</p>
+                {{ end }}
+                
+                <p>{{ if .confirmation_message }}{{ .confirmation_message }}{{ else }}Your submission has been recorded successfully.{{ end }}</p>
+            </div>
+            
+            <div class="summary">
+                <p><strong>Submission Summary:</strong></p>
+                
+                {{ if .email }}
+                <p><strong>Email:</strong> {{ .email }}</p>
+                {{ end }}
+                
+                {{ if .message }}
+                <p><strong>Message:</strong> {{ .message }}</p>
+                {{ end }}
+                
+                {{ range $key, $value := . }}
+                {{ if and (ne $key "subject") (ne $key "timestamp") (ne $key "email") (ne $key "name") (ne $key "message") (ne $key "confirmation_message") }}
+                <p><strong>{{ $key }}:</strong> {{ $value }}</p>
+                {{ end }}
+                {{ end }}
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>This is an automated confirmation message.</p>
+            <div class="timestamp">Submitted: {{.timestamp}}</div>
+        </div>
+    </div>
+</body>
+</html>

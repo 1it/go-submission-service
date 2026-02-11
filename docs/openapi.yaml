@@ -1,0 +1,594 @@
+openapi: 3.0.3
+info:
+  title: Go Submission Service API
+  description: |
+    A production-ready, cloud-native form submission service that handles form data collection, 
+    email notifications, and provides comprehensive admin management capabilities.
+    
+    ## Features
+    - Form submission handling with validation
+    - Email notifications using multiple providers
+    - Admin dashboard API with authentication
+    - Security features (reCAPTCHA, rate limiting, CORS)
+    - Prometheus metrics and health checks
+    
+    ## Authentication
+    - Public endpoints require no authentication
+    - Admin endpoints require API key authentication via `X-API-Key` header
+  version: 1.0.0
+  contact:
+    name: Go Submission Service Support
+    url: https://github.com/1it/go-submission-service
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://your-domain.com
+    description: Production server
+
+tags:
+  - name: Form Submission
+    description: Form submission and processing endpoints
+  - name: Admin
+    description: Administrative endpoints for managing submissions
+  - name: Health & Metrics
+    description: Health checks and monitoring endpoints
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for admin endpoints
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token for admin endpoints
+
+  schemas:
+    FormSubmissionRequest:
+      type: object
+      required:
+        - form_data
+      properties:
+        form_data:
+          type: object
+          description: Form field data as key-value pairs
+          additionalProperties: true
+          example:
+            email: "user@example.com"
+            name: "John Doe"
+            company: "Example Corp"
+            message: "Hello, this is a test message"
+        recaptcha_token:
+          type: string
+          description: reCAPTCHA v3 token for spam protection
+          example: "03AFcWeA..."
+        turnstile_token:
+          type: string
+          description: Cloudflare Turnstile token for spam protection
+          example: "0.AQAAAAAAA..."
+
+    FormSubmissionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Thank you for your submission!"
+        submission_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            type:
+              type: string
+              example: "validation"
+            code:
+              type: string
+              example: "invalid_email"
+            message:
+              type: string
+              example: "Invalid email format"
+            details:
+              type: object
+              additionalProperties: true
+              example:
+                email: "Invalid email format"
+                name: "Name is required"
+
+    Submission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        form_data:
+          type: object
+          additionalProperties: true
+          example:
+            email: "user@example.com"
+            name: "John Doe"
+            company: "Example Corp"
+        status:
+          type: string
+          enum: [pending, processed, email_sent, failed]
+          example: "processed"
+        form_type:
+          type: string
+          example: "business_contact"
+        source:
+          type: string
+          example: "website"
+        ip_address:
+          type: string
+          example: "192.168.1.1"
+        user_agent:
+          type: string
+          example: "Mozilla/5.0..."
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    SubmissionList:
+      type: object
+      properties:
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Submission'
+        total:
+          type: integer
+          example: 150
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        version:
+          type: string
+          example: "1.0.0"
+        uptime:
+          type: number
+          format: float
+          example: 3600.5
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+              example: "healthy"
+            email:
+              type: string
+              enum: [healthy, unhealthy]
+              example: "healthy"
+
+    StatsResponse:
+      type: object
+      properties:
+        total_submissions:
+          type: integer
+          example: 1500
+        submissions_by_status:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            pending: 50
+            processed: 1200
+            failed: 250
+        submissions_by_form_type:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            business_contact: 800
+            newsletter: 400
+            generic: 300
+
+paths:
+  /api/v1/submit:
+    post:
+      tags:
+        - Form Submission
+      summary: Submit form data
+      description: Submit form data for processing and email delivery
+      operationId: submitForm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormSubmissionRequest'
+            examples:
+              basic:
+                summary: Basic form submission
+                value:
+                  form_data:
+                    email: "user@example.com"
+                    name: "John Doe"
+                    message: "Hello, this is a test message"
+              business_contact:
+                summary: Business contact form
+                value:
+                  form_data:
+                    form_type: "business_contact"
+                    full_name: "John Smith"
+                    work_email: "john.smith@company.com"
+                    company: "Tech Solutions Inc"
+                    company_size: "200-500"
+                    job_title: "CTO"
+                    phone: "+1-555-0123"
+                    message: "We're interested in your enterprise solutions"
+      responses:
+        '200':
+          description: Form submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormSubmissionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/signup:
+    post:
+      tags:
+        - Form Submission
+      summary: Legacy signup endpoint
+      description: Legacy endpoint for backward compatibility. Redirects to /api/v1/submit
+      operationId: legacySignup
+      deprecated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormSubmissionRequest'
+      responses:
+        '200':
+          description: Signup successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormSubmissionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/health:
+    get:
+      tags:
+        - Health & Metrics
+      summary: Health check
+      description: Check the health status of the service and its dependencies
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/metrics:
+    get:
+      tags:
+        - Health & Metrics
+      summary: Prometheus metrics
+      description: Expose Prometheus metrics for monitoring
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP http_requests_total Total number of HTTP requests received
+                  # TYPE http_requests_total counter
+                  http_requests_total{method="POST",path="/api/v1/submit",status_code="200"} 150
+
+  /api/v1/admin/submissions:
+    get:
+      tags:
+        - Admin
+      summary: List submissions
+      description: List all form submissions with optional filtering
+      operationId: listSubmissions
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by submission status
+          schema:
+            type: string
+            enum: [pending, processed, email_sent, failed]
+        - name: form_type
+          in: query
+          description: Filter by form type
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of submissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/submissions/{id}:
+    get:
+      tags:
+        - Admin
+      summary: Get submission by ID
+      description: Retrieve a specific submission by its ID
+      operationId: getSubmission
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Submission ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Submission details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '404':
+          description: Submission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Admin
+      summary: Delete submission
+      description: Delete a specific submission by its ID
+      operationId: deleteSubmission
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Submission ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Submission deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Submission deleted successfully"
+        '404':
+          description: Submission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/submissions/{id}/status:
+    patch:
+      tags:
+        - Admin
+      summary: Update submission status
+      description: Update the status of a specific submission
+      operationId: updateSubmissionStatus
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Submission ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending, processed, email_sent, failed]
+                  example: "processed"
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '404':
+          description: Submission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/stats:
+    get:
+      tags:
+        - Admin
+      summary: Get submission statistics
+      description: Get comprehensive statistics about form submissions
+      operationId: getStats
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Submission statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/health:
+    get:
+      tags:
+        - Admin
+      summary: Admin health check
+      description: Detailed health check with dependency status
+      operationId: adminHealthCheck
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Detailed health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse' 

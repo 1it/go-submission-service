@@ -1,0 +1,12 @@
+{
+    "form_data": {
+        "form_type": "business_contact",
+        "full_name": "John Smith",
+        "work_email": "john.smith@techsolutions.com",
+        "company": "Tech Solutions Inc",
+        "company_size": "200-500",
+        "job_title": "Chief Technology Officer",
+        "phone": "+1-555-0123",
+        "message": "We're interested in your enterprise solutions for our growing team. We currently have around 300 employees and are looking for scalable solutions that can grow with us. Please reach out to discuss our requirements and potential partnership opportunities."
+    }
+}
